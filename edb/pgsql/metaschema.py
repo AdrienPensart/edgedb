@@ -3170,11 +3170,9 @@ class SysConfigFullFunction(dbops.Function):
                 (s.value->>'typemod') AS typemod,
                 (s.value->>'backend_setting') AS backend_setting
             FROM
-                jsonb_each(
-                    (SELECT json
-                    FROM edgedbinstdata.instdata
-                    WHERE key = 'configspec')
-                ) AS s
+                edgedbinstdata.instdata as id,
+            LATERAL jsonb_each(id.json) AS s
+            WHERE id.key LIKE 'configspec%'
         ),
 
         config_defaults AS (
@@ -3558,6 +3556,7 @@ class ResetSessionConfigFunction(dbops.Function):
         )
 
 
+# XXX: Uh oh.
 class ApplySessionConfigFunction(dbops.Function):
     """Apply an EdgeDB config setting to the backend, if possible.
 
@@ -6371,6 +6370,7 @@ async def generate_more_support_functions(
     await _execute_block(conn, block)
 
 
+# XXX: Uh oh
 def _describe_config(
     schema: s_schema.Schema,
     source: str,

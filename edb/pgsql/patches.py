@@ -74,4 +74,6 @@ The current kinds are:
  * repair - fix up inconsistencies in *user* schemas
 """
 PATCHES: list[tuple[str, str]] = _setup_patches([
+    ('metaschema-sql', 'SysConfigFullFunction'),
+    # ('edgeql+schema+config', '')
 ])
