@@ -6635,6 +6635,9 @@ def _describe_config_object(
 
             ptype = p.get_target(schema)
             assert ptype is not None
+            if str(ptype.get_name(schema)) == 'cfg::AbstractConfig':
+                continue
+
             ptr_card = p.get_cardinality(schema)
             mult = ptr_card.is_multi()
             psource = f'item.{ qlquote.quote_ident(pn) }'
@@ -6945,6 +6948,12 @@ def _generate_config_type_view(
         link_psi = types.get_pointer_storage_info(link, schema=schema)
         link_col = link_psi.column_name
 
+        if str(link_type.get_name(schema)) == 'cfg::AbstractConfig':
+            # XXX: This isn't right at all
+            config_key = f"'{CONFIG_ID[scope]}'::uuid"
+            target_cols[link] = f'({config_key}) AS {qi(link_col)}'
+            continue
+
         if rptr is not None:
             target_path = path + [(rptr, exclusive_props)]
         else:
@@ -7043,6 +7052,12 @@ def _generate_config_type_view(
                     _memo=_memo,
                 )
                 views.extend(desc_views)
+
+        # HACK: For computable links (just extensions hopefully?), we
+        # want to compile the targets as a side effect, but we don't
+        # want to actually include them in the view.
+        if link.get_computable(schema):
+            continue
 
         target_source = _build_data_source(
             schema, link, self_idx, alias=link_name)
