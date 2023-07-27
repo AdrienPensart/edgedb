@@ -948,7 +948,7 @@ cdef class DatabaseConnectionView:
 
         for op in ops:
             if op.scope is config.ConfigScope.INSTANCE:
-                await self._db._index.apply_system_config_op(conn, op)
+                await self._db._index.apply_system_config_op(conn, op, self)
             elif op.scope is config.ConfigScope.DATABASE:
                 self.set_database_config(
                     op.apply(settings, self.get_database_config()),
@@ -1237,9 +1237,9 @@ cdef class DatabaseIndex:
     def iter_dbs(self):
         return iter(self._dbs.values())
 
-    async def _save_system_overrides(self, conn):
+    async def _save_system_overrides(self, conn, spec):
         data = config.to_json(
-            self._sys_config_spec,
+            spec,
             self._sys_config,
             setting_filter=lambda v: v.source == 'system override',
             include_source=False,
@@ -1259,8 +1259,13 @@ cdef class DatabaseIndex:
             ).generate(block)
         await conn.sql_execute(block.to_string().encode())
 
-    async def apply_system_config_op(self, conn, op):
-        spec = self._sys_config_spec
+    async def apply_system_config_op(self, conn, op, dbv):
+        # spec = self._sys_config_spec
+
+        # XXX: NOT THE RIGHT WAY TO DO THIS!
+        # AND VERY DODGY ON A SYSTEM LEVEL???
+        spec = config.load_spec_from_schema(dbv.get_schema())
+
         op_value = op.get_setting(spec)
         if op.opcode is not None:
             allow_missing = (
@@ -1274,10 +1279,10 @@ cdef class DatabaseIndex:
         # the callbacks below, because certain config changes
         # may cause the backend connection to drop.
         self.update_sys_config(
-            op.apply(self._sys_config_spec, self._sys_config)
+            op.apply(spec, self._sys_config)
         )
 
-        await self._save_system_overrides(conn)
+        await self._save_system_overrides(conn, spec)
 
         if op.opcode is config.OpCode.CONFIG_ADD:
             await self._server._on_system_config_add(op.setting_name, op_value)
