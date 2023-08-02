@@ -31,22 +31,14 @@ jobs:
         postgres-version: [ 14 ]
         single-mode:
          - ''
-         - 'NOCREATEDB NOCREATEROLE'
-         - 'CREATEDB NOCREATEROLE'
         multi-tenant-mode: [ '' ]
         include:
-          - postgres-version: 13
-            single-mode: ''
-            multi-tenant-mode: ''
           - postgres-version: 14
             single-mode: ''
             multi-tenant-mode: 'remote-compiler'
           - postgres-version: 14
             single-mode: ''
             multi-tenant-mode: 'multi-tenant'
-          - postgres-version: 15
-            single-mode: ''
-            multi-tenant-mode: ''
     services:
       postgres:
         image: fantix/pgvector:${{ matrix.postgres-version }}

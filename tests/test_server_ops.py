@@ -998,6 +998,7 @@ class TestServerOps(tb.BaseHTTPTestCase, tb.CLITestCaseMixin):
                 backend_dsn=f'postgres:///?user=postgres&host={path}',
                 reset_auth=True,
                 auto_shutdown_after=1,
+                debug=True,
             ) as sd:
                 connect_args = {
                     k: v
