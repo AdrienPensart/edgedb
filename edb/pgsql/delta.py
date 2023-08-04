@@ -3521,7 +3521,8 @@ class CreateIndex(IndexCommand, adapts=s_indexes.CreateIndex):
 
         sql_kwarg_exprs = dict()
         # Get the name of the root index that this index implements
-        orig_name = sn.shortname_from_fullname(index.get_name(schema))
+        orig_name: sn.Name = sn.shortname_from_fullname(index.get_name(schema))
+        root_name: sn.Name
         root_code: str | None
         if orig_name == s_indexes.DEFAULT_INDEX:
             root_name = orig_name
@@ -3576,7 +3577,7 @@ class CreateIndex(IndexCommand, adapts=s_indexes.CreateIndex):
         with_clause: Dict[str, str] | None = None
 
         # FTS
-        if index.has_base_with_name(schema, sn.QualName('fts', 'textsearch')):
+        if root_name == sn.QualName('fts', 'textsearch'):
 
             from edb.common import debug
             if debug.flags.zombodb:
@@ -3593,9 +3594,11 @@ class CreateIndex(IndexCommand, adapts=s_indexes.CreateIndex):
                 # create a generated column __fts_document__
                 alter_table = dbops.AlterTable(table_name)
 
+                default_lang = "'english'"
+                language = sql_kwarg_exprs.get('language', default_lang)
+
                 document_exprs = []
                 for sql_expr in sql_exprs:
-                    language = "'english'"
                     weight = "'A'"
                     document_exprs.append(
                         f'''
