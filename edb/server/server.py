@@ -1670,6 +1670,7 @@ class Server(ha_base.ClusterProtocol):
 
         self.create_task(task(), interruptable=True)
 
+    # XXX: I am not really sure this... aw damn.
     def _on_local_database_config_change(self, dbname):
         if not self._accept_new_tasks:
             return
