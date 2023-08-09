@@ -624,6 +624,7 @@ class TransactionState(NamedTuple):
     system_config: immutables.Map[str, config.SettingValue]
     cached_reflection: immutables.Map[str, Tuple[str, ...]]
     tx: Transaction
+    config_spec: config.Spec
     migration_state: Optional[MigrationState] = None
     migration_rewrite_state: Optional[MigrationRewriteState] = None
 
@@ -644,6 +645,7 @@ class Transaction:
         database_config: immutables.Map[str, config.SettingValue],
         system_config: immutables.Map[str, config.SettingValue],
         cached_reflection: immutables.Map[str, Tuple[str, ...]],
+        config_spec: config.Spec,
         implicit: bool = True,
     ) -> None:
 
@@ -664,6 +666,7 @@ class Transaction:
             database_config=database_config,
             system_config=system_config,
             cached_reflection=cached_reflection,
+            config_spec=config_spec,
             tx=self,
         )
 
@@ -757,6 +760,12 @@ class Transaction:
             std_schema,
             self._current.user_schema,
             self._current.global_schema,
+        )
+
+    def get_config_spec(self, std_spec: config.Spec) -> config.Spec:
+        return config.ChainedSpec(
+            std_spec,
+            self._current.config_spec,
         )
 
     def get_user_schema(self) -> s_schema.FlatSchema:
@@ -865,6 +874,7 @@ class CompilerConnectionState:
         database_config: immutables.Map[str, config.SettingValue],
         system_config: immutables.Map[str, config.SettingValue],
         cached_reflection: immutables.Map[str, Tuple[str, ...]],
+        config_spec: config.Spec,
     ):
         self._tx_count = time.monotonic_ns()
         self._init_current_tx(
@@ -875,6 +885,7 @@ class CompilerConnectionState:
             database_config=database_config,
             system_config=system_config,
             cached_reflection=cached_reflection,
+            config_spec=config_spec,
         )
         self._savepoints_log = {}
 
@@ -892,6 +903,7 @@ class CompilerConnectionState:
         database_config: immutables.Map[str, config.SettingValue],
         system_config: immutables.Map[str, config.SettingValue],
         cached_reflection: immutables.Map[str, Tuple[str, ...]],
+        config_spec: config.Spec,
     ) -> None:
         assert isinstance(user_schema, s_schema.FlatSchema)
         assert isinstance(global_schema, s_schema.FlatSchema)
@@ -904,6 +916,7 @@ class CompilerConnectionState:
             database_config=database_config,
             system_config=system_config,
             cached_reflection=cached_reflection,
+            config_spec=config_spec,
         )
 
     def can_sync_to_savepoint(self, spid: int) -> bool:
@@ -955,6 +968,7 @@ class CompilerConnectionState:
             database_config=prior_state.database_config,
             system_config=prior_state.system_config,
             cached_reflection=prior_state.cached_reflection,
+            config_spec=prior_state.config_spec,
         )
 
         return prior_state
@@ -973,6 +987,7 @@ class CompilerConnectionState:
             database_config=latest_state.database_config,
             system_config=latest_state.system_config,
             cached_reflection=latest_state.cached_reflection,
+            config_spec=latest_state.config_spec,
         )
 
         return latest_state
