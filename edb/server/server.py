@@ -862,7 +862,7 @@ class Server(ha_base.ClusterProtocol):
             )
             backend_ids = json.loads(backend_ids_json)
 
-            db_config = await self.introspect_db_config(conn)
+            db_config = await self.introspect_db_config(conn, user_schema)
             extensions = await self._introspect_extensions(conn)
 
             extension_names_json = await conn.sql_fetch_val(
@@ -915,9 +915,19 @@ class Server(ha_base.ClusterProtocol):
         if db is not None:
             db.extensions = extensions
 
-    async def introspect_db_config(self, conn):
+    async def introspect_db_config(self, conn, user_schema):
         result = await conn.sql_fetch_val(self.get_sys_query('dbconfig'))
-        return config.from_json(self._config_settings, result)
+
+        # XXX: are we hoping to not use the user_schema in the server?
+        spec = config.ChainedSpec(
+            self._config_settings,
+            config.load_ext_spec_from_schema(
+                user_schema,
+                self._std_schema,
+            ),
+        )
+
+        return config.from_json(spec, result)
 
     async def _early_introspect_db(self, dbname):
         """We need to always introspect the extensions for each database.
@@ -1079,7 +1089,7 @@ class Server(ha_base.ClusterProtocol):
                     global_schema = await self.introspect_global_schema(conn)
                     user_schema = await self.introspect_user_schema(
                         conn, global_schema)
-                    config = await self.introspect_db_config(conn)
+                    config = await self.introspect_db_config(conn, user_schema)
                     try:
                         logger.info("repairing database '%s'", dbname)
                         sql += bootstrap.prepare_repair_patch(
