@@ -154,7 +154,7 @@ cdef class Database:
         DatabaseIndex index,
         str name,
         *,
-        object user_schema,
+        bytes user_schema_pickled,
         object db_config,
         object reflection_cache,
         object backend_ids,
@@ -176,7 +176,11 @@ cdef class Database:
             maxsize=defines._MAX_QUERIES_CACHE)
 
         self.db_config = db_config
-        self.user_schema = user_schema
+        if user_schema_pickled is None:
+            self.user_schema = None
+        else:
+            self.user_schema = pickle.loads(user_schema_pickled)
+        self.user_schema_pickled = user_schema_pickled
         self.reflection_cache = reflection_cache
         self.backend_ids = backend_ids
         self.extensions = extensions
@@ -194,18 +198,19 @@ cdef class Database:
 
     cdef _set_and_signal_new_user_schema(
         self,
-        new_schema,
+        new_schema_pickled,
         extensions,
         reflection_cache=None,
         backend_ids=None,
         db_config=None,
     ):
-        if new_schema is None:
+        if new_schema_pickled is None:
             raise AssertionError('new_schema is not supposed to be None')
 
         self.dbver = next_dbver()
 
-        self.user_schema = new_schema
+        self.user_schema = pickle.loads(new_schema_pickled)
+        self.user_schema_pickled = new_schema_pickled
         self.extensions = extensions
 
         if backend_ids is not None:
@@ -288,9 +293,9 @@ cdef class Database:
         return len(self._eql_to_compiled) + len(self._sql_to_compiled)
 
     async def introspection(self):
-        if self.user_schema is None:
+        if self.user_schema_pickled is None:
             async with self._introspection_lock:
-                if self.user_schema is None:
+                if self.user_schema_pickled is None:
                     await self.tenant.introspect_db(self.name)
 
 
@@ -522,13 +527,18 @@ cdef class DatabaseConnectionView:
 
     def get_user_schema(self):
         if self._in_tx:
-            if self._in_tx_user_schema_pickled:
+            if self._in_tx_user_schema is None:
                 self._in_tx_user_schema = pickle.loads(
                     self._in_tx_user_schema_pickled)
-                self._in_tx_user_schema_pickled = None
             return self._in_tx_user_schema
         else:
             return self._db.user_schema
+
+    def get_user_schema_pickled(self):
+        if self._in_tx:
+            return self._in_tx_user_schema_pickled
+        else:
+            return self._db.user_schema_pickled
 
     def get_global_schema(self):
         if self._in_tx:
@@ -792,6 +802,7 @@ cdef class DatabaseConnectionView:
         self._in_tx_db_config = self._db.db_config
         self._in_tx_modaliases = self._modaliases
         self._in_tx_user_schema = self._db.user_schema
+        self._in_tx_user_schema_pickled = self._db.user_schema_pickled
         self._in_tx_global_schema = self._db._index._global_schema
         self._in_tx_state_serializer = self._state_serializer
 
@@ -839,7 +850,7 @@ cdef class DatabaseConnectionView:
             if query_unit.user_schema is not None:
                 self._in_tx_dbver = next_dbver()
                 self._db._set_and_signal_new_user_schema(
-                    pickle.loads(query_unit.user_schema),
+                    query_unit.user_schema,
                     query_unit.extensions,
                     pickle.loads(query_unit.cached_reflection)
                         if query_unit.cached_reflection is not None
@@ -883,7 +894,7 @@ cdef class DatabaseConnectionView:
                 self._db._update_backend_ids(self._in_tx_new_types)
             if query_unit.user_schema is not None:
                 self._db._set_and_signal_new_user_schema(
-                    pickle.loads(query_unit.user_schema),
+                    query_unit.user_schema,
                     query_unit.extensions,
                     pickle.loads(query_unit.cached_reflection)
                         if query_unit.cached_reflection is not None
@@ -928,7 +939,7 @@ cdef class DatabaseConnectionView:
             self._db._update_backend_ids(self._in_tx_new_types)
         if user_schema is not None:
             self._db._set_and_signal_new_user_schema(
-                pickle.loads(user_schema),
+                user_schema,
                 extensions,
                 pickle.loads(cached_reflection)
                     if cached_reflection is not None
@@ -1204,7 +1215,7 @@ cdef class DatabaseIndex:
         self,
         dbname,
         *,
-        user_schema,
+        user_schema_pickled,
         db_config,
         reflection_cache,
         backend_ids,
@@ -1214,7 +1225,7 @@ cdef class DatabaseIndex:
         db = self._dbs.get(dbname)
         if db is not None:
             db._set_and_signal_new_user_schema(
-                user_schema,
+                user_schema_pickled,
                 extensions,
                 reflection_cache,
                 backend_ids,
@@ -1227,7 +1238,7 @@ cdef class DatabaseIndex:
             db = Database(
                 self,
                 dbname,
-                user_schema=user_schema,
+                user_schema_pickled=user_schema_pickled,
                 db_config=db_config,
                 reflection_cache=reflection_cache,
                 backend_ids=backend_ids,
