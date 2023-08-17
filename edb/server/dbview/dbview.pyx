@@ -542,13 +542,18 @@ cdef class DatabaseConnectionView:
 
     def get_global_schema(self):
         if self._in_tx:
-            if self._in_tx_global_schema_pickled:
+            if self._in_tx_global_schema is None:
                 self._in_tx_global_schema = pickle.loads(
                     self._in_tx_global_schema_pickled)
-                self._in_tx_global_schema_pickled = None
             return self._in_tx_global_schema
         else:
             return self._db._index._global_schema
+
+    def get_global_schema_pickled(self):
+        if self._in_tx:
+            return self._in_tx_global_schema_pickled
+        else:
+            return self._db._index._global_schema_pickled
 
     def get_schema(self):
         user_schema = self.get_user_schema()
@@ -804,6 +809,8 @@ cdef class DatabaseConnectionView:
         self._in_tx_user_schema = self._db.user_schema
         self._in_tx_user_schema_pickled = self._db.user_schema_pickled
         self._in_tx_global_schema = self._db._index._global_schema
+        self._in_tx_global_schema_pickled = \
+            self._db._index._global_schema_pickled
         self._in_tx_state_serializer = self._state_serializer
 
     cdef _apply_in_tx(self, query_unit):
@@ -868,8 +875,7 @@ cdef class DatabaseConnectionView:
                 side_effects |= SideEffects.DatabaseChanges
             if query_unit.global_schema is not None:
                 side_effects |= SideEffects.GlobalSchemaChanges
-                self._db._index.update_global_schema(
-                    pickle.loads(query_unit.global_schema))
+                self._db._index.update_global_schema(query_unit.global_schema)
             if query_unit.has_role_ddl:
                 side_effects |= SideEffects.RoleChanges
                 self._db.tenant.fetch_roles()
@@ -908,8 +914,7 @@ cdef class DatabaseConnectionView:
                 side_effects |= SideEffects.DatabaseConfigChanges
             if query_unit.global_schema is not None:
                 side_effects |= SideEffects.GlobalSchemaChanges
-                self._db._index.update_global_schema(
-                    pickle.loads(query_unit.global_schema))
+                self._db._index.update_global_schema(query_unit.global_schema)
                 self._db.tenant.fetch_roles()
             if self._in_tx_with_role_ddl:
                 side_effects |= SideEffects.RoleChanges
@@ -953,8 +958,7 @@ cdef class DatabaseConnectionView:
             side_effects |= SideEffects.DatabaseConfigChanges
         if global_schema is not None:
             side_effects |= SideEffects.GlobalSchemaChanges
-            self._db._index.update_global_schema(
-                pickle.loads(global_schema))
+            self._db._index.update_global_schema(global_schema)
             self._db.tenant.fetch_roles()
         if self._in_tx_with_role_ddl:
             side_effects |= SideEffects.RoleChanges
@@ -1162,6 +1166,7 @@ cdef class DatabaseIndex:
         self._tenant = tenant
         self._std_schema = std_schema
         self._global_schema = global_schema
+        self._global_schema_pickled = pickle.dumps(global_schema, -1)
         self._default_sysconfig = default_sysconfig
         self._sys_config_spec = sys_config_spec
         # TODO: This factory will probably need to become per-db once
@@ -1208,8 +1213,12 @@ cdef class DatabaseIndex:
     def get_global_schema(self):
         return self._global_schema
 
-    def update_global_schema(self, global_schema):
-        self._global_schema = global_schema
+    def get_global_schema_pickled(self):
+        return self._global_schema_pickled
+
+    def update_global_schema(self, global_schema_pickled):
+        self._global_schema = pickle.loads(global_schema_pickled)
+        self._global_schema_pickled = global_schema_pickled
 
     def register_db(
         self,
